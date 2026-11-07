@@ -36,8 +36,8 @@ func New(opts models.Options) Model {
 	sp.Spinner = spinner.Dot
 	return Model{
 		st: &State{
-			screen:   ScreenDashboard,
-			scanning: true,
+			screen:   ScreenWelcome,
+			scanning: false,
 			opts:     opts,
 			selected: map[string]bool{},
 		},
@@ -47,8 +47,10 @@ func New(opts models.Options) Model {
 	}
 }
 
+// Init does nothing until the user chooses to scan from the welcome screen —
+// clean-me only looks when asked.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.sp.Tick, m.scanCmd())
+	return nil
 }
 
 func (m Model) scanCmd() tea.Cmd {
@@ -113,6 +115,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	s := m.st
 	switch s.screen {
+	case ScreenWelcome:
+		return tui.RenderWelcome(s.width, s.height)
 	case ScreenDashboard:
 		return tui.RenderDashboard(s.res, s.menuCursor, s.scanning, m.sp.View(), s.width, s.height)
 	case ScreenCategories:

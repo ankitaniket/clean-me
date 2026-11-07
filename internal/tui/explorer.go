@@ -8,17 +8,15 @@ import (
 	"github.com/ankitaniket/clean-me/internal/report"
 )
 
-// RenderExplorer draws screen 3: selectable items for one category. cursor
-// indexes cat.Items; selected is keyed by item.Key().
+// RenderExplorer draws screen 3: compact one-line rows with checkboxes, plus a
+// detail panel for the focused item (so the list itself stays uncluttered).
 func RenderExplorer(cat models.Category, cursor int, selected map[string]bool, w, h int) string {
 	var b strings.Builder
-	b.WriteString(TitleStyle.Render(cat.Title+" cleanup") + "\n")
 
 	if cat.ReportOnly {
-		b.WriteString(SubtitleStyle.Render("Audit only — review these; clean-me will not delete them.") + "\n\n")
+		b.WriteString(TitleStyle.Render(cat.Title) + "  " + SubtitleStyle.Render("audit only — clean-me never deletes these") + "\n\n")
 		for _, it := range cat.Items {
-			b.WriteString(fmt.Sprintf("  %s\n", it.Path))
-			b.WriteString("    " + SubtitleStyle.Render(it.Purpose) + "\n")
+			b.WriteString("  " + projectLabel(it.Path) + "\n")
 		}
 		if len(cat.Items) == 0 {
 			b.WriteString(SubtitleStyle.Render("  Nothing to report.") + "\n")
@@ -27,37 +25,53 @@ func RenderExplorer(cat models.Category, cursor int, selected map[string]bool, w
 		return b.String()
 	}
 
-	b.WriteString(SubtitleStyle.Render(report.Humanize(cat.Reclaimable())+" available") + "\n\n")
-
-	pathW := w - 40
-	if pathW < 12 {
-		pathW = 12
-	}
-	var selTotal int64
-	for i, it := range cat.Items {
-		check := "[ ]"
+	// count selection within this category
+	var selN int
+	var selSize int64
+	for _, it := range cat.Items {
 		if selected[it.Key()] {
-			check = CheckStyle.Render("[x]")
-			selTotal += it.Reclaimable
+			selN++
+			selSize += it.Reclaimable
 		}
-		badge := tierStyle(it.Tier).Render(it.Tier.String())
+	}
+
+	head := fmt.Sprintf("%s  %s  ·  %s",
+		TitleStyle.Render(cat.Title),
+		SubtitleStyle.Render(report.Humanize(cat.Reclaimable())+" available"),
+		FocusStyle.Render(fmt.Sprintf("%d selected (%s)", selN, report.Humanize(selSize))))
+	b.WriteString(head + "   " + RibbonStyle.Render(ribbon) + "\n\n")
+
+	for i, it := range cat.Items {
+		box := "[ ]"
+		if selected[it.Key()] {
+			box = CheckStyle.Render("[x]")
+		}
 		marker := "  "
+		name := projectLabel(it.Path)
 		if i == cursor {
-			marker = SelStyle.Render("▸ ")
+			marker = FocusStyle.Render("▸ ")
+			name = FocusStyle.Render(name)
 		}
-		line := fmt.Sprintf("%s%s %8s  %-6s  %s", marker, check, report.Humanize(it.Reclaimable), badge, truncate(it.Path, pathW))
-		b.WriteString(line + "\n")
-		detail := "      " + SubtitleStyle.Render(it.Purpose)
-		if it.Warn != "" {
-			detail += "  " + WarnStyle.Render("⚠ "+it.Warn)
+		tag := ""
+		if it.Tier >= models.TierDanger {
+			tag = "  " + WarnStyle.Render("danger")
 		}
-		b.WriteString(detail + "\n")
+		b.WriteString(fmt.Sprintf("%s%s %8s  %s%s\n", marker, box, report.Humanize(it.Reclaimable), name, tag))
 	}
 	if len(cat.Items) == 0 {
 		b.WriteString(SubtitleStyle.Render("  Nothing to clean here.") + "\n")
 	}
 
-	b.WriteString("\n" + BigStyle.Render("Selected: "+report.Humanize(selTotal)) + "\n")
-	b.WriteString(footer("space select · a all-safe · n none · enter review · esc back · q quit"))
+	// detail panel for the focused item
+	if cursor >= 0 && cursor < len(cat.Items) {
+		it := cat.Items[cursor]
+		b.WriteString("\n" + SubtitleStyle.Render(truncate(it.Path, w-2)) + "\n")
+		b.WriteString(SubtitleStyle.Render(it.Purpose) + "\n")
+		if it.Warn != "" {
+			b.WriteString(WarnStyle.Render("⚠ "+it.Warn) + "\n")
+		}
+	}
+
+	b.WriteString("\n" + footer("space select · a all-safe · n none · enter review · esc back"))
 	return b.String()
 }

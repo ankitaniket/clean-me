@@ -42,6 +42,9 @@ func (Stage) Scan(ctx context.Context, o models.Options) ([]models.Item, error) 
 			if err != nil || !d.IsDir() {
 				return nil
 			}
+			if d.Name() == ".Trash" {
+				return filepath.SkipDir
+			}
 			if strings.Count(filepath.Clean(p), string(os.PathSeparator))-base > maxDepth {
 				return filepath.SkipDir
 			}

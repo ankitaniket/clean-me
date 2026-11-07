@@ -24,15 +24,65 @@ go build -o clean-me ./cmd/clean-me
 clean-me
 ```
 
-Five screens, fully keyboard-driven:
+The dashboard is calm and read-only-first: it never scans or deletes until you ask it to.
 
-1. **Dashboard** — auto-scans on launch; shows total reclaimable space, opportunity count, and per-stage status.
-2. **Categories** — Docker, Node.js, Python, System, plus Git & Redis audits.
-3. **Explorer** — selectable items with size · purpose · path · risk tier. Danger items are never preselected.
-4. **Review** — exact impact: how much is reclaimed, what moves to trash vs. is permanent, with a confirmation step.
-5. **Progress** — live per-item results and the **actual** space freed.
+It opens on a **Welcome** screen that reassures you nothing is touched until you review and confirm — "it only looks when asked." Press `Enter` to start the scan.
 
-**Smart Cleanup** selects every safe (tier-1) item for you and jumps straight to review.
+```
+  clean-me
+
+  A calm way to reclaim disk space.
+
+  This is read-only. Nothing is scanned or deleted
+  until you ask. You will review every item and
+  confirm before anything is removed.
+
+  It only looks when asked.
+
+  ▸ Press Enter to scan      q  quit
+```
+
+While you browse, a persistent green ribbon stays pinned to the top:
+
+```
+  read-only — nothing is deleted until you confirm
+```
+
+The browsing screens are deliberately compact — **one line per item** with a detail panel for whatever is focused, so there is far less text on screen:
+
+1. **Welcome** — read-only reassurance; `Enter` starts the scan.
+2. **Dashboard** — total reclaimable space, opportunity count, and per-stage status.
+3. **Categories** — Docker, Node.js, Python, System, plus Git & Redis audits.
+4. **Explorer** — one compact line per item (`[x]` · size · name) with a detail panel showing purpose, path, and risk tier for the focused item. Danger items are never preselected.
+5. **Review** — lists **every** item that will be removed, grouped by stage.
+6. **Progress** — live per-item results and the **actual** space freed.
+
+**Selection is explicit.** Each item carries an `[x]` / `[ ]` checkbox: `Space` toggles the focused item, `a` selects all safe (tier-1) items, `n` deselects everything. A live **`N selected (size)`** counter always shows what you have chosen.
+
+**Smart Cleanup** selects only safe (tier-1) items for you and jumps straight to review.
+
+The **Review** screen is the last gate. It lists every item that will be removed, grouped by stage, each tagged `→ Trash (recoverable)` or `permanent`, with per-stage and grand totals. Press `Enter` to proceed; danger items additionally require `y`.
+
+```
+  read-only — nothing is deleted until you confirm
+
+  Review — 2.0 GB across 6 items
+
+  Node.js                                   1.6 GB
+    ✓ node_modules  ~/work/api              1.2 GB   → Trash (recoverable)
+    ✓ node_modules  ~/work/web              380 MB   → Trash (recoverable)
+    ✓ npm cache                              41 MB   → Trash (recoverable)
+
+  Docker                                    402 MB
+    ✓ build cache                           402 MB   permanent
+
+  System                                     18 MB
+    ✓ Homebrew cache                         18 MB   → Trash (recoverable)
+
+  Total → Trash: 1.6 GB      Permanent: 402 MB
+
+  ▸ Enter  clean      y  confirm danger items      Esc  back
+```
 
 ### Keys
 

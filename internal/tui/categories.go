@@ -8,20 +8,13 @@ import (
 	"github.com/ankitaniket/clean-me/internal/report"
 )
 
-// RenderCategories draws screen 2: one card per stage. cursor indexes
+// RenderCategories draws screen 2: one compact line per stage. cursor indexes
 // res.Categories directly.
 func RenderCategories(res models.ScanResult, cursor, w, h int) string {
 	var b strings.Builder
-	b.WriteString(TitleStyle.Render("Explore cleanup categories") + "\n")
-	b.WriteString(SubtitleStyle.Render("Select a category to inspect its cleanup opportunities.") + "\n\n")
+	b.WriteString(TitleStyle.Render("Categories") + "   " + RibbonStyle.Render(ribbon) + "\n\n")
 
 	for i, c := range res.Categories {
-		marker := "  "
-		name := c.Title
-		if i == cursor {
-			marker = SelStyle.Render("▸ ")
-			name = SelStyle.Render(name)
-		}
 		var right string
 		switch {
 		case !c.Available:
@@ -33,10 +26,13 @@ func RenderCategories(res models.ScanResult, cursor, w, h int) string {
 		default:
 			right = report.Humanize(c.Reclaimable())
 		}
-		b.WriteString(fmt.Sprintf("%s%-12s %s\n", marker, name, right))
-		b.WriteString("    " + SubtitleStyle.Render(c.Description) + "\n")
+		if i == cursor {
+			b.WriteString(FocusStyle.Render(fmt.Sprintf("▸ %-9s", c.Title)) + " " + right + "\n")
+		} else {
+			b.WriteString(fmt.Sprintf("  %-9s %s\n", c.Title, right))
+		}
 	}
 
-	b.WriteString("\n" + footer("↑↓ navigate · enter open · esc back · q quit"))
+	b.WriteString("\n" + footer("↑↓ move · enter open · esc back · q quit"))
 	return b.String()
 }

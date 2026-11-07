@@ -10,6 +10,7 @@ import (
 func cannedModel() Model {
 	m := New(models.Options{})
 	m.st.scanning = false
+	m.st.screen = ScreenDashboard
 	m.st.res = models.ScanResult{
 		OS: "testos",
 		Categories: []models.Category{
@@ -84,6 +85,17 @@ func TestReportCategoryNotSelectable(t *testing.T) {
 	m = send(t, m, key("space"))
 	if len(m.st.selected) != 0 {
 		t.Errorf("report-only items must not be selectable, got %d", len(m.st.selected))
+	}
+}
+
+func TestWelcomeStartsScan(t *testing.T) {
+	m := New(models.Options{})
+	if m.st.screen != ScreenWelcome {
+		t.Fatalf("initial screen = %v, want Welcome", m.st.screen)
+	}
+	m = send(t, m, key("enter"))
+	if m.st.screen != ScreenDashboard || !m.st.scanning {
+		t.Fatalf("after enter: screen=%v scanning=%v, want Dashboard+scanning", m.st.screen, m.st.scanning)
 	}
 }
 

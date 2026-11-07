@@ -12,7 +12,8 @@ import (
 type Screen int
 
 const (
-	ScreenDashboard Screen = iota
+	ScreenWelcome Screen = iota
+	ScreenDashboard
 	ScreenCategories
 	ScreenExplorer
 	ScreenReview

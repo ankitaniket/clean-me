@@ -18,6 +18,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.st.screen {
+	case ScreenWelcome:
+		return m.keyWelcome(key)
 	case ScreenDashboard:
 		return m.keyDashboard(key)
 	case ScreenCategories:
@@ -28,6 +30,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyReview(key)
 	case ScreenProgress:
 		return m.keyProgress(key)
+	}
+	return m, nil
+}
+
+func (m Model) keyWelcome(key string) (tea.Model, tea.Cmd) {
+	if key == "enter" {
+		m.st.scanning = true
+		m.st.screen = ScreenDashboard
+		return m, tea.Batch(m.sp.Tick, m.scanCmd())
 	}
 	return m, nil
 }

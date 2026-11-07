@@ -38,7 +38,7 @@ func (Stage) Scan(ctx context.Context, o models.Options) ([]models.Item, error) 
 				return nil
 			}
 			name := d.Name()
-			if name == ".git" || (strings.HasPrefix(name, ".") && name != ".") {
+			if name == ".Trash" || name == ".git" || (strings.HasPrefix(name, ".") && name != ".") {
 				return filepath.SkipDir
 			}
 			if strings.Count(filepath.Clean(p), string(os.PathSeparator))-base > maxDepth {

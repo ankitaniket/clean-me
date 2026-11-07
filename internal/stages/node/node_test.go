@@ -64,3 +64,29 @@ func TestScanRequiresProjectRoot(t *testing.T) {
 		t.Errorf("offered wrong node_modules: %s", offered[0])
 	}
 }
+
+// Scan must never descend into the macOS Trash: a real project living under
+// a .Trash directory must not surface its node_modules.
+func TestScanSkipsTrash(t *testing.T) {
+	root := t.TempDir()
+
+	// root/.Trash/proj/{package.json,node_modules} — a fully valid project,
+	// but it is inside the Trash and must be ignored.
+	proj := filepath.Join(root, ".Trash", "proj")
+	if err := os.MkdirAll(filepath.Join(proj, "node_modules", "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := Stage{}.Scan(context.Background(), models.Options{Paths: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Action == models.ActionTrash {
+			t.Errorf("Scan offered a trashed item from inside .Trash: %s", it.Path)
+		}
+	}
+}
