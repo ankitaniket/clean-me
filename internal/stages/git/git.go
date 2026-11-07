@@ -1,4 +1,7 @@
-package stages
+// Package git is a report-only stage: it audits local branches that look
+// abandoned (merged, upstream gone, or stale) across every repo under the given
+// paths. It never deletes — branch removal is out of scope.
+package git
 
 import (
 	"context"
@@ -10,40 +13,40 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/ankitaniket/clean-me/internal/run"
-	"github.com/ankitaniket/clean-me/internal/stage"
 )
 
-// Git is a report-only stage: it audits local branches that look abandoned
-// (merged, upstream gone, or stale) across every repo under the given paths.
-// It never deletes — branch removal is intentionally out of scope for v1.
-type Git struct{}
+type Stage struct{}
 
-func (Git) Name() string { return "git" }
+func (Stage) Name() string        { return "git" }
+func (Stage) Title() string       { return "Git" }
+func (Stage) Description() string { return "Merged, stale and upstream-gone branches" }
+func (Stage) ReportOnly() bool    { return true }
+func (Stage) Available() bool     { return run.Look("git") }
 
-func (Git) Available() bool { return run.Look("git") }
+const (
+	maxDepth  = 6
+	staleDays = 90
+)
 
-const gitMaxDepth = 6
-const staleDays = 90
-
-func (Git) Scan(ctx context.Context, o stage.Options) ([]stage.Item, error) {
+func (Stage) Scan(ctx context.Context, o models.Options) ([]models.Item, error) {
 	roots := o.Paths
 	if len(roots) == 0 {
 		roots = []string{"."}
 	}
-	var items []stage.Item
+	var items []models.Item
 	for _, root := range roots {
 		base := strings.Count(filepath.Clean(root), string(os.PathSeparator))
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || !d.IsDir() {
 				return nil
 			}
-			if strings.Count(filepath.Clean(p), string(os.PathSeparator))-base > gitMaxDepth {
+			if strings.Count(filepath.Clean(p), string(os.PathSeparator))-base > maxDepth {
 				return filepath.SkipDir
 			}
 			if d.Name() == ".git" {
-				repo := filepath.Dir(p)
-				items = append(items, auditRepo(ctx, repo)...)
+				items = append(items, AuditRepo(ctx, filepath.Dir(p))...)
 				return filepath.SkipDir
 			}
 			return nil
@@ -52,12 +55,8 @@ func (Git) Scan(ctx context.Context, o stage.Options) ([]stage.Item, error) {
 	return items, nil
 }
 
-// Apply is a no-op: report-only stages never mutate anything.
-func (Git) Apply(ctx context.Context, items []stage.Item, o stage.Options) (stage.Result, error) {
-	return stage.Result{Stage: "git", Skipped: len(items)}, nil
-}
-
-func auditRepo(ctx context.Context, repo string) []stage.Item {
+// AuditRepo returns report-only items for abandoned-looking branches in a repo.
+func AuditRepo(ctx context.Context, repo string) []models.Item {
 	def := defaultBranch(ctx, repo)
 	current, _ := run.Capture(ctx, "git", "-C", repo, "symbolic-ref", "--short", "HEAD")
 	current = strings.TrimSpace(current)
@@ -76,7 +75,7 @@ func auditRepo(ctx context.Context, repo string) []stage.Item {
 		return nil
 	}
 
-	var items []stage.Item
+	var items []models.Item
 	now := time.Now().Unix()
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
@@ -111,19 +110,17 @@ func auditRepo(ctx context.Context, repo string) []stage.Item {
 		if len(reasons) == 0 {
 			continue
 		}
-		items = append(items, stage.Item{
-			Stage:      "git",
-			Path:       fmt.Sprintf("%s › %s", repo, branch),
-			Purpose:    strings.Join(reasons, ", ") + " — review & `git branch -d` manually",
-			Tier:       stage.TierSafe,
-			ReportOnly: true,
+		items = append(items, models.Item{
+			Stage:   "git",
+			Path:    fmt.Sprintf("%s › %s", repo, branch),
+			Purpose: strings.Join(reasons, ", ") + " — review & `git branch -d` manually",
+			Tier:    models.TierSafe,
+			Action:  models.ActionReport,
 		})
 	}
 	return items
 }
 
-// defaultBranch resolves the repo's main branch, preferring origin/HEAD, then
-// common names.
 func defaultBranch(ctx context.Context, repo string) string {
 	if out, err := run.Capture(ctx, "git", "-C", repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
 		return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "origin/"))

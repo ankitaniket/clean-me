@@ -1,16 +1,16 @@
-// Package cmd wires the Cobra command tree and shared flag handling for
-// clean-me.
+// Package cmd wires the Cobra command tree. `clean-me` with no subcommand
+// launches the interactive dashboard (or, with no TTY, prints the read-only
+// scan report so it stays useful in pipes, CI and SSH sessions).
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 
+	"github.com/ankitaniket/clean-me/internal/app"
+	"github.com/ankitaniket/clean-me/internal/models"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
-
-	"github.com/ankitaniket/clean-me/internal/stage"
-	"github.com/ankitaniket/clean-me/internal/stages"
 )
 
 var (
@@ -26,15 +26,26 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "clean-me",
-	Short: "Safe, multi-stage system cleanup — confirms before deleting, shows path · purpose · size",
-	Long: `clean-me reclaims disk space across Docker, OS caches, Node.js and Python
-projects, and audits stale git branches and Redis memory.
+	Short: "Interactive, safe system cleanup — see it, select it, review it, reclaim it",
+	Long: `clean-me is an interactive terminal dashboard for reclaiming disk space across
+Docker, OS caches, Node.js and Python projects, with audits for stale git
+branches and Redis memory.
 
-It never deletes blindly: every item is previewed with its path, purpose and
-reclaimable size, deletions go to the trash first (recoverable), and dangerous
-operations require an explicit --force. Safe to run on production servers and
-professional laptops.`,
+Run it with no arguments to launch the dashboard. Every item shows its path,
+purpose and reclaimable size; deletions move to the trash first; dangerous
+operations require explicit confirmation. The scan/clean/doctor subcommands
+provide a scriptable, non-interactive surface.`,
 	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := refuseRoot(); err != nil {
+			return err
+		}
+		if isatty.IsTerminal(os.Stdout.Fd()) {
+			return app.Run(baseOptions(false))
+		}
+		// Non-interactive: fall back to the safe, read-only report.
+		return runScan(cmd)
+	},
 }
 
 // Execute runs the CLI.
@@ -50,55 +61,24 @@ func init() {
 	pf.StringSliceVar(&flagStages, "stage", nil, "limit to these stages (docker,system,node,python,git,redis)")
 	pf.StringSliceVar(&flagPaths, "path", []string{"."}, "roots to scan for node/python/git")
 	pf.IntVar(&flagTier, "tier", 1, "max risk tier to act on (1 safe, 2 opt-in, 3 danger)")
-	pf.BoolVar(&flagJSON, "json", false, "emit machine-readable JSON")
-	pf.BoolVar(&flagForce, "force", false, "permit danger-tier (tier 3) and permanent operations")
+	pf.BoolVar(&flagJSON, "json", false, "emit machine-readable JSON (scan)")
+	pf.BoolVar(&flagForce, "force", false, "permit danger-tier (tier 3) operations")
 	pf.BoolVar(&flagYes, "yes", false, "assume yes (non-interactive / CI)")
 	pf.BoolVar(&flagNoTrash, "no-trash", false, "delete permanently instead of moving to trash")
 	pf.BoolVar(&flagAllow, "allow-root", false, "allow running as root (refused by default)")
 
-	rootCmd.AddCommand(scanCmd, cleanCmd)
+	rootCmd.AddCommand(scanCmd, cleanCmd, doctorCmd)
 }
 
-// allStages is the full registry in display order.
-func allStages() []stage.Stage {
-	return []stage.Stage{
-		stages.Docker{}, stages.System{}, stages.Node{},
-		stages.Python{}, stages.Git{}, stages.Redis{},
-	}
-}
-
-// selected resolves which stages to run: the --stage filter intersected with
-// availability. Unavailable stages are reported to stderr so the user knows why
-// something was skipped.
-func selected() []stage.Stage {
-	want := map[string]bool{}
-	for _, s := range flagStages {
-		want[s] = true
-	}
-	var out []stage.Stage
-	for _, s := range allStages() {
-		if len(want) > 0 && !want[s.Name()] {
-			continue
-		}
-		if !s.Available() {
-			if len(want) > 0 {
-				fmt.Fprintf(os.Stderr, "note: stage %q unavailable (tool/daemon not found), skipping\n", s.Name())
-			}
-			continue
-		}
-		out = append(out, s)
-	}
-	return out
-}
-
-func options(dryRun bool) stage.Options {
-	return stage.Options{
-		DryRun:  dryRun,
+// baseOptions builds engine options from the shared flags.
+func baseOptions(dryRun bool) models.Options {
+	return models.Options{
 		Force:   flagForce,
 		Yes:     flagYes,
 		NoTrash: flagNoTrash,
-		MaxTier: stage.Tier(flagTier),
+		MaxTier: models.Tier(flagTier),
 		Paths:   flagPaths,
+		DryRun:  dryRun,
 	}
 }
 
@@ -108,19 +88,4 @@ func refuseRoot() error {
 		return fmt.Errorf("refusing to run as root without --allow-root")
 	}
 	return nil
-}
-
-// scanAll runs every selected stage's read-only Scan and returns the combined
-// items.
-func scanAll(ctx context.Context, o stage.Options) []stage.Item {
-	var items []stage.Item
-	for _, s := range selected() {
-		found, err := s.Scan(ctx, o)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "note: %s scan: %v\n", s.Name(), err)
-			continue
-		}
-		items = append(items, found...)
-	}
-	return items
 }

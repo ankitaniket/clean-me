@@ -1,16 +1,15 @@
-// Package report renders the scan preview: the grouped "path · purpose · size"
-// table and reclaimable-space totals that the user sees before confirming.
+// Package report renders the CLI scan preview: the grouped
+// "path · purpose · size" table, humanized sizes, and JSON output.
 package report
 
 import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/ankitaniket/clean-me/internal/stage"
+	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -35,43 +34,26 @@ func Humanize(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// Text writes the grouped preview table grouped by stage. Returns total
-// reclaimable bytes across all non-report items.
-func Text(w io.Writer, items []stage.Item) int64 {
-	byStage := map[string][]stage.Item{}
-	order := []string{}
-	for _, it := range items {
-		if _, ok := byStage[it.Stage]; !ok {
-			order = append(order, it.Stage)
+// Text writes the grouped preview grouped by category and returns total
+// reclaimable bytes.
+func Text(w io.Writer, res models.ScanResult) int64 {
+	for _, c := range res.Categories {
+		if !c.Available || len(c.Items) == 0 {
+			continue
 		}
-		byStage[it.Stage] = append(byStage[it.Stage], it)
-	}
-	sort.Strings(order)
-
-	var grand int64
-	for _, name := range order {
-		group := byStage[name]
-		var sub int64
-		for _, it := range group {
-			if !it.ReportOnly {
-				sub += it.Reclaimable
-			}
-		}
-		grand += sub
-
-		header := titleStyle.Render(fmt.Sprintf("▸ %s", strings.ToUpper(name)))
-		if group[0].ReportOnly {
+		header := titleStyle.Render("▸ " + strings.ToUpper(c.Title))
+		if c.ReportOnly {
 			header += dimStyle.Render("  (report-only — nothing is deleted)")
 		} else {
-			header += dimStyle.Render(fmt.Sprintf("  (%s reclaimable)", Humanize(sub)))
+			header += dimStyle.Render(fmt.Sprintf("  (%s reclaimable)", Humanize(c.Reclaimable())))
 		}
 		fmt.Fprintln(w, "\n"+header)
 
 		tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
 		fmt.Fprintln(tw, "  TIER\tSIZE\tPURPOSE\tPATH")
-		for _, it := range group {
+		for _, it := range c.Items {
 			size := Humanize(it.Reclaimable)
-			if it.ReportOnly {
+			if it.ReportOnly() {
 				size = Humanize(it.Size)
 			}
 			fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", it.Tier, size, it.Purpose, it.Path)
@@ -82,12 +64,20 @@ func Text(w io.Writer, items []stage.Item) int64 {
 		tw.Flush()
 	}
 
-	fmt.Fprintln(w, "\n"+totalStyle.Render(fmt.Sprintf("Total reclaimable: %s", Humanize(grand))))
-	return grand
+	total := res.TotalReclaimable()
+	fmt.Fprintln(w, "\n"+totalStyle.Render(fmt.Sprintf("Total reclaimable: %s", Humanize(total))))
+	return total
 }
 
-// JSON writes the items as machine-readable JSON.
-func JSON(w io.Writer, items []stage.Item) error {
+// JSON writes all scanned items as machine-readable JSON.
+func JSON(w io.Writer, res models.ScanResult) error {
+	var items []models.Item
+	for _, c := range res.Categories {
+		items = append(items, c.Items...)
+	}
+	if items == nil {
+		items = []models.Item{}
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(items)

@@ -4,30 +4,34 @@ import (
 	"context"
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/ankitaniket/clean-me/internal/report"
+	"github.com/ankitaniket/clean-me/internal/scanner"
+	"github.com/spf13/cobra"
 )
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
 	Short: "Preview what could be reclaimed (read-only, deletes nothing)",
-	Long: `scan runs every selected stage read-only and prints the path, purpose and
-reclaimable size of each item, grouped by stage, with totals. It is completely
-safe — nothing is ever deleted. This is the shareable "here's what it would
-free" view.`,
+	Long: `scan runs every selected stage read-only and prints each item's path, purpose
+and reclaimable size, grouped by category, with totals. Nothing is ever
+deleted. Use --json for machine-readable output.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		items := scanAll(ctx, options(true))
-		if flagJSON {
-			return report.JSON(os.Stdout, items)
-		}
-		if len(items) == 0 {
-			cmd.Println("Nothing to reclaim — your system is already tidy.")
-			return nil
-		}
-		report.Text(os.Stdout, items)
-		cmd.Println("\nRun `clean-me clean` to act on these (with per-item confirmation).")
-		return nil
+		return runScan(cmd)
 	},
+}
+
+// runScan is shared by `scan` and the non-TTY fallback of the root command.
+func runScan(cmd *cobra.Command) error {
+	stages := scanner.Select(flagStages)
+	res := scanner.Scan(context.Background(), stages, baseOptions(true))
+	if flagJSON {
+		return report.JSON(os.Stdout, res)
+	}
+	if res.OpportunityCount() == 0 && res.TotalReclaimable() == 0 {
+		cmd.Println("Nothing to reclaim — your system is already tidy.")
+		return nil
+	}
+	report.Text(os.Stdout, res)
+	cmd.Println("\nRun `clean-me` for the interactive dashboard, or `clean-me clean` to act with confirmation.")
+	return nil
 }

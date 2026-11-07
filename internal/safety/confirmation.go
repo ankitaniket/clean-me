@@ -1,7 +1,4 @@
-// Package confirm handles interactive, default-No confirmation and TTY
-// detection. Destructive actions never proceed without an explicit yes (or the
-// --yes flag for CI); with no TTY and no --yes they are refused.
-package confirm
+package safety
 
 import (
 	"bufio"
@@ -21,8 +18,8 @@ func Interactive() bool {
 
 var reader = bufio.NewReader(os.Stdin)
 
-// Ask prompts the user with a yes/no question that defaults to No. The assumeYes
-// flag (from --yes) answers yes without prompting, for non-interactive use.
+// Ask prompts a yes/no question that defaults to No. assumeYes (from --yes)
+// answers yes without prompting, for non-interactive use.
 func Ask(prompt string, assumeYes bool) bool {
 	if assumeYes {
 		return true
