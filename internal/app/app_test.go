@@ -110,6 +110,81 @@ func TestQuitKey(t *testing.T) {
 	}
 }
 
+func TestHelpToggles(t *testing.T) {
+	m := cannedModel()
+	if m.st.showHelp {
+		t.Fatal("help should start hidden")
+	}
+	m = send(t, m, key("?"))
+	if !m.st.showHelp {
+		t.Fatal("? should open help")
+	}
+	// Other keys are swallowed while help is open.
+	m = send(t, m, key("down"))
+	if !m.st.showHelp {
+		t.Fatal("keys other than ?/esc should not close help")
+	}
+	m = send(t, m, key("?"))
+	if m.st.showHelp {
+		t.Fatal("? should close help")
+	}
+}
+
+func TestDashboardItem2OpensSpace(t *testing.T) {
+	m := cannedModel()
+	m = send(t, m, key("down")) // → Explore
+	m = send(t, m, key("down")) // → Space Explorer
+	if m.st.menuCursor != 2 {
+		t.Fatalf("menuCursor = %d, want 2", m.st.menuCursor)
+	}
+	m = send(t, m, key("enter"))
+	if m.st.screen != ScreenSpace {
+		t.Fatalf("screen = %v, want ScreenSpace", m.st.screen)
+	}
+}
+
+func TestExplorerSortCycles(t *testing.T) {
+	m := cannedModel()
+	m.st.screen = ScreenExplorer
+	m.st.activeCat = 0
+	if m.st.sort != sortSize {
+		t.Fatalf("default sort = %v, want sortSize", m.st.sort)
+	}
+	m = send(t, m, key("s"))
+	if m.st.sort != sortName {
+		t.Fatalf("after s: sort = %v, want sortName", m.st.sort)
+	}
+	m = send(t, m, key("s"))
+	if m.st.sort != sortTier {
+		t.Fatalf("after ss: sort = %v, want sortTier", m.st.sort)
+	}
+	m = send(t, m, key("s"))
+	if m.st.sort != sortSize {
+		t.Fatalf("after sss: sort = %v, want sortSize (wrap)", m.st.sort)
+	}
+}
+
+func TestExplorerFilterMode(t *testing.T) {
+	m := cannedModel()
+	m.st.screen = ScreenExplorer
+	m.st.activeCat = 0
+	m = send(t, m, key("/"))
+	if !m.st.filtering {
+		t.Fatal("/ should enter filter mode")
+	}
+	m = send(t, m, key("n")) // typed into the filter, not select-none
+	if m.st.filter != "n" {
+		t.Fatalf("filter = %q, want %q", m.st.filter, "n")
+	}
+	m = send(t, m, key("enter")) // exit keeping filter
+	if m.st.filtering {
+		t.Fatal("enter should exit filter mode")
+	}
+	if m.st.filter != "n" {
+		t.Fatalf("filter should be kept on enter, got %q", m.st.filter)
+	}
+}
+
 func TestSpaceTogglesSelection(t *testing.T) {
 	m := cannedModel()
 	m.st.screen = ScreenExplorer

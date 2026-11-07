@@ -17,6 +17,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil // ignore input while the initial scan runs
 	}
 
+	// Help overlay: `?` toggles on any screen (except while typing a filter);
+	// while the overlay is open swallow everything but its own toggle/esc.
+	if m.st.showHelp {
+		if key == "?" || key == "esc" {
+			m.st.showHelp = false
+		}
+		return m, nil
+	}
+	if key == "?" && !(m.st.screen == ScreenExplorer && m.st.filtering) {
+		m.st.showHelp = true
+		return m, nil
+	}
+
 	switch m.st.screen {
 	case ScreenWelcome:
 		return m.keyWelcome(key)
@@ -30,6 +43,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyReview(key)
 	case ScreenProgress:
 		return m.keyProgress(key)
+	case ScreenSpace:
+		return m.keySpace(key)
 	}
 	return m, nil
 }
@@ -50,17 +65,20 @@ func (m Model) keyDashboard(key string) (tea.Model, tea.Cmd) {
 			m.st.menuCursor--
 		}
 	case "down", "j":
-		if m.st.menuCursor < 1 {
+		if m.st.menuCursor < 2 {
 			m.st.menuCursor++
 		}
 	case "enter":
-		if m.st.menuCursor == 0 {
+		switch m.st.menuCursor {
+		case 0:
 			m.st.reviewItems = m.st.smartItems()
 			m.st.reviewFrom = ScreenDashboard
 			m.st.screen = ScreenReview
-		} else {
+		case 1:
 			m.st.catCursor = 0
 			m.st.screen = ScreenCategories
+		case 2:
+			return m.openSpace()
 		}
 	}
 	return m, nil
@@ -80,6 +98,9 @@ func (m Model) keyCategories(key string) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.st.activeCat = m.st.catCursor
 		m.st.itemCursor = 0
+		m.st.explorerTop = 0
+		m.st.filter = ""
+		m.st.filtering = false
 		m.st.screen = ScreenExplorer
 	case "esc":
 		m.st.screen = ScreenDashboard
@@ -88,7 +109,30 @@ func (m Model) keyCategories(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) keyExplorer(key string) (tea.Model, tea.Cmd) {
-	items := m.st.activeItems()
+	// Filter (search) mode captures typing until enter/esc.
+	if m.st.filtering {
+		switch key {
+		case "enter":
+			m.st.filtering = false // keep the filter
+		case "esc":
+			m.st.filtering = false
+			m.st.filter = "" // clear the filter
+		case "backspace":
+			if len(m.st.filter) > 0 {
+				r := []rune(m.st.filter)
+				m.st.filter = string(r[:len(r)-1])
+			}
+		default:
+			if len(key) == 1 { // a single printable rune
+				m.st.filter += key
+			}
+		}
+		m.st.itemCursor = 0
+		m.st.explorerTop = 0
+		return m, nil
+	}
+
+	items := m.st.sortedActiveItems()
 	switch key {
 	case "up", "k":
 		if m.st.itemCursor > 0 {
@@ -98,6 +142,12 @@ func (m Model) keyExplorer(key string) (tea.Model, tea.Cmd) {
 		if m.st.itemCursor < len(items)-1 {
 			m.st.itemCursor++
 		}
+	case "s":
+		m.st.sort = m.st.sort.next()
+		m.st.itemCursor = 0
+		m.st.explorerTop = 0
+	case "/":
+		m.st.filtering = true
 	case " ", "space":
 		if m.st.itemCursor < len(items) {
 			m.st.toggle(items[m.st.itemCursor])
@@ -114,6 +164,7 @@ func (m Model) keyExplorer(key string) (tea.Model, tea.Cmd) {
 			m.st.screen = ScreenReview
 		}
 	case "esc":
+		m.st.filter = ""
 		m.st.screen = ScreenCategories
 	}
 	return m, nil
@@ -137,6 +188,58 @@ func (m Model) keyReview(key string) (tea.Model, tea.Cmd) {
 	case "y":
 		if hasDanger {
 			return m.beginClean()
+		}
+	}
+	return m, nil
+}
+
+// openSpace enters the Space Explorer at the start directory.
+func (m Model) openSpace() (tea.Model, tea.Cmd) {
+	m.st.spaceDir = m.st.spaceStartDir()
+	m.st.spaceStack = nil
+	m.st.spaceCur = 0
+	m.st.spaceTop = 0
+	m.st.spaceErr = ""
+	m.st.screen = ScreenSpace
+	return m.loadSpace(m.st.spaceDir)
+}
+
+func (m Model) keySpace(key string) (tea.Model, tea.Cmd) {
+	if m.st.spaceBusy {
+		return m, nil
+	}
+	entries := m.st.spaceCache[m.st.spaceDir]
+	switch key {
+	case "up", "k":
+		if m.st.spaceCur > 0 {
+			m.st.spaceCur--
+		}
+	case "down", "j":
+		if m.st.spaceCur < len(entries)-1 {
+			m.st.spaceCur++
+		}
+	case "enter", "l", "right":
+		if m.st.spaceCur < len(entries) {
+			e := entries[m.st.spaceCur]
+			if e.IsDir {
+				child := filepathJoin(m.st.spaceDir, e.Name)
+				m.st.spaceStack = append(m.st.spaceStack, m.st.spaceDir)
+				m.st.spaceDir = child
+				m.st.spaceCur = 0
+				m.st.spaceTop = 0
+				m.st.spaceErr = ""
+				return m.loadSpace(child)
+			}
+		}
+	case "esc", "h", "left":
+		if n := len(m.st.spaceStack); n > 0 {
+			m.st.spaceDir = m.st.spaceStack[n-1]
+			m.st.spaceStack = m.st.spaceStack[:n-1]
+			m.st.spaceCur = 0
+			m.st.spaceTop = 0
+			m.st.spaceErr = ""
+		} else {
+			m.st.screen = ScreenDashboard
 		}
 	}
 	return m, nil

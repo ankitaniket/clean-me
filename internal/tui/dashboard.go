@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/ankitaniket/clean-me/internal/diskstat"
 	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/ankitaniket/clean-me/internal/report"
 )
@@ -11,10 +13,32 @@ import (
 var menuItems = []struct{ title, hint string }{
 	{"Smart Cleanup", "pick the safe items for me"},
 	{"Explore", "choose exactly what to clean"},
+	{"Space Explorer", "browse what's using disk (read-only)"},
 }
 
-// RenderDashboard draws screen 1: compact overview + a 2-item menu.
-func RenderDashboard(res models.ScanResult, menuCursor int, scanning bool, spinner string, w, h int) string {
+// diskBar draws a single-line proportional usage bar for a volume.
+func diskBar(u diskstat.Usage, width int) string {
+	if width < 4 {
+		width = 4
+	}
+	if u.Total <= 0 {
+		return SubtitleStyle.Render("[" + strings.Repeat("·", width) + "] disk usage unavailable")
+	}
+	filled := int(float64(u.Used) / float64(u.Total) * float64(width))
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > width {
+		filled = width
+	}
+	bar := strings.Repeat("#", filled) + strings.Repeat("·", width-filled)
+	return fmt.Sprintf("[%s] %s used · %s free of %s",
+		bar, report.Humanize(u.Used), report.Humanize(u.Free), report.Humanize(u.Total))
+}
+
+// RenderDashboard draws screen 1: a disk bar, the reclaimable total, the
+// per-category breakdown (largest first), and a 3-item menu.
+func RenderDashboard(res models.ScanResult, disk diskstat.Usage, menuCursor int, scanning bool, spinner string, w, h int) string {
 	var b strings.Builder
 	b.WriteString(TitleStyle.Render("clean-me") + "   " + RibbonStyle.Render(ribbon) + "\n\n")
 
@@ -24,12 +48,37 @@ func RenderDashboard(res models.ScanResult, menuCursor int, scanning bool, spinn
 		return b.String()
 	}
 
+	barW := w - 48
+	if barW > 24 {
+		barW = 24
+	}
+	if barW < 6 {
+		barW = 6
+	}
+	b.WriteString("   " + SubtitleStyle.Render(diskBar(disk, barW)) + "\n\n")
+
 	b.WriteString("   " + BigStyle.Render(report.Humanize(res.TotalReclaimable())))
 	b.WriteString(SubtitleStyle.Render("  reclaimable") + "   ")
 	b.WriteString(TitleStyle.Render(fmt.Sprintf("%d", res.OpportunityCount())))
 	b.WriteString(SubtitleStyle.Render(" opportunities") + "\n\n")
 
-	for _, c := range res.Categories {
+	// Sort categories by reclaimable desc; report-only/zero/unavailable last.
+	order := make([]int, len(res.Categories))
+	for i := range order {
+		order[i] = i
+	}
+	rank := func(c models.Category) int64 {
+		if !c.Available || c.ReportOnly {
+			return -1
+		}
+		return c.Reclaimable()
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return rank(res.Categories[order[i]]) > rank(res.Categories[order[j]])
+	})
+
+	for _, idx := range order {
+		c := res.Categories[idx]
 		var status string
 		switch {
 		case !c.Available:
@@ -51,6 +100,6 @@ func RenderDashboard(res models.ScanResult, menuCursor int, scanning bool, spinn
 		}
 	}
 
-	b.WriteString("\n" + footer("↑↓ move · enter select · q quit"))
+	b.WriteString("\n" + footer("↑↓ move · enter select · ? help · q quit"))
 	return b.String()
 }

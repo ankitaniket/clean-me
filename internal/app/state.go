@@ -5,8 +5,18 @@
 package app
 
 import (
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/ankitaniket/clean-me/internal/diskstat"
 	"github.com/ankitaniket/clean-me/internal/models"
 )
+
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
 
 // Screen identifies the active screen.
 type Screen int
@@ -18,7 +28,46 @@ const (
 	ScreenExplorer
 	ScreenReview
 	ScreenProgress
+	ScreenSpace
 )
+
+// sortMode controls how the explorer orders items.
+type sortMode int
+
+const (
+	sortSize sortMode = iota
+	sortName
+	sortTier
+)
+
+func (s sortMode) next() sortMode {
+	switch s {
+	case sortSize:
+		return sortName
+	case sortName:
+		return sortTier
+	default:
+		return sortSize
+	}
+}
+
+func (s sortMode) label() string {
+	switch s {
+	case sortName:
+		return "name"
+	case sortTier:
+		return "tier"
+	default:
+		return "size"
+	}
+}
+
+// SpaceEntry is one child of a directory in the Space Explorer.
+type SpaceEntry struct {
+	Name  string
+	Size  int64
+	IsDir bool
+}
 
 // State is the mutable application state, shared by pointer so async commands
 // can observe the latest values.
@@ -36,12 +85,84 @@ type State struct {
 	itemCursor int
 	selected   map[string]bool
 
+	// explorer sort/search/scroll state
+	sort        sortMode
+	filtering   bool
+	filter      string
+	explorerTop int
+
+	// help overlay (toggled on any screen)
+	showHelp bool
+
 	reviewItems []models.Item
 	reviewFrom  Screen
 
 	cleaning   bool
 	outcomes   []models.ItemOutcome
 	progressCh chan models.ItemOutcome
+
+	// disk usage captured before cleaning, to show free before→after
+	freeBefore int64
+	haveFree   bool
+
+	// Space Explorer state (read-only drill-down)
+	spaceDir   string
+	spaceStack []string
+	spaceCur   int
+	spaceTop   int
+	spaceCache map[string][]SpaceEntry
+	spaceBusy  bool
+	spaceErr   string
+}
+
+// diskUsage returns disk usage for the SpaceRoot (or home / "/"). Errors yield
+// a zero Usage so the render can degrade gracefully.
+func (s *State) diskUsage() diskstat.Usage {
+	u, err := diskstat.For(s.spaceStartDir())
+	if err != nil {
+		return diskstat.Usage{}
+	}
+	return u
+}
+
+// spaceStartDir resolves the starting directory for the Space Explorer and the
+// dashboard disk bar: Options.SpaceRoot, else $HOME, else "/".
+func (s *State) spaceStartDir() string {
+	if s.opts.SpaceRoot != "" {
+		return s.opts.SpaceRoot
+	}
+	if h := homeDir(); h != "" {
+		return h
+	}
+	return "/"
+}
+
+// sortedActiveItems returns a sorted + filtered copy of the open category's
+// items, never mutating the ScanResult.
+func (s *State) sortedActiveItems() []models.Item {
+	items := s.activeItems()
+	out := make([]models.Item, 0, len(items))
+	f := strings.ToLower(strings.TrimSpace(s.filter))
+	for _, it := range items {
+		if f != "" && !strings.Contains(strings.ToLower(it.Path), f) {
+			continue
+		}
+		out = append(out, it)
+	}
+	switch s.sort {
+	case sortName:
+		sort.SliceStable(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	case sortTier:
+		sort.SliceStable(out, func(i, j int) bool {
+			if out[i].Tier != out[j].Tier {
+				return out[i].Tier < out[j].Tier
+			}
+			return out[i].Reclaimable > out[j].Reclaimable
+		})
+	default: // sortSize
+		sort.SliceStable(out, func(i, j int) bool { return out[i].Reclaimable > out[j].Reclaimable })
+	}
+	return out
 }
 
 // activeItems returns the items of the currently open category.

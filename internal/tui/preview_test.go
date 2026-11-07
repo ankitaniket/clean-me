@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ankitaniket/clean-me/internal/diskstat"
 	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -44,9 +45,14 @@ func TestPreview(t *testing.T) {
 	banner("WELCOME")
 	fmt.Println(RenderWelcome(w, h))
 	banner("DASHBOARD")
-	fmt.Println(RenderDashboard(res, 0, false, "", w, h))
+	disk := diskstat.Usage{Total: 460_000_000_000, Free: 140_000_000_000, Used: 320_000_000_000}
+	fmt.Println(RenderDashboard(res, disk, 0, false, "", w, h))
 	banner("EXPLORER (Node.js)")
-	fmt.Println(RenderExplorer(res.Categories[2], 1, sel, w, h))
+	cat := res.Categories[2]
+	exp, _ := RenderExplorer(ExplorerView{Cat: cat, Items: append([]models.Item(nil), cat.Items...), Cursor: 1, Selected: sel, SortBy: "size"}, w, h)
+	fmt.Println(exp)
 	banner("REVIEW")
 	fmt.Println(RenderReview(reviewItems, w, h))
+	banner("HELP")
+	fmt.Println(RenderHelp(w, h))
 }
