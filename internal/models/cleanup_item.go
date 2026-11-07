@@ -60,6 +60,7 @@ type Item struct {
 	Size        int64  `json:"size"`        // logical/apparent size in bytes
 	Reclaimable int64  `json:"reclaimable"` // estimated bytes freed (may be < Size for pnpm/bun links)
 	Warn        string `json:"warn,omitempty"`
+	Detail      string `json:"detail,omitempty"` // secondary line, e.g. "modified 2025-02-11" or "iOS 17 simulators"
 	Tier        Tier   `json:"tier"`
 	Action      Action `json:"action"`
 	Command     string `json:"command,omitempty"` // for ActionCommand
@@ -75,10 +76,13 @@ func (i Item) Key() string { return i.Stage + "\x00" + i.Path }
 
 // Options carries the user's intent into scanning and cleaning.
 type Options struct {
-	Force   bool
-	Yes     bool // non-interactive: proceed without prompting (CI)
-	NoTrash bool // permanently delete instead of moving to trash
-	MaxTier Tier
-	Paths   []string // roots for node/python/git scans
-	DryRun  bool
+	Force       bool
+	Yes         bool // non-interactive: proceed without prompting (CI)
+	NoTrash     bool // permanently delete instead of moving to trash
+	MaxTier     Tier
+	Paths       []string // roots for node/python/git scans
+	DryRun      bool
+	MinFileSize int64    // large-files threshold in bytes (0 → stage default)
+	Exclude     []string // user allow-list of paths never touched
+	SpaceRoot   string   // root for the Space Explorer (default: home)
 }
