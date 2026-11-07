@@ -14,6 +14,7 @@ var menuItems = []struct{ title, hint string }{
 	{"Smart Cleanup", "pick the safe items for me"},
 	{"Explore", "choose exactly what to clean"},
 	{"Space Explorer", "browse what's using disk (read-only)"},
+	{"History", "review past cleanups · restore from Trash"},
 }
 
 // diskBar draws a single-line proportional usage bar for a volume.

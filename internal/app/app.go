@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/ankitaniket/clean-me/internal/cleaner"
+	"github.com/ankitaniket/clean-me/internal/history"
 	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/ankitaniket/clean-me/internal/scanner"
 	"github.com/ankitaniket/clean-me/internal/tui"
@@ -118,6 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitProgress(m.st.progressCh)
 	case cleanDoneMsg:
 		m.st.cleaning = false
+		_ = history.Record(homeDir(), time.Now(), m.st.outcomes)
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -187,6 +190,8 @@ func (m Model) View() string {
 		out, top := tui.RenderSpace(sv, s.width, s.height)
 		s.spaceTop = top
 		return out
+	case ScreenHistory:
+		return tui.RenderHistory(s.histRuns, s.histCur, s.histMsg, s.width, s.height)
 	}
 	return ""
 }

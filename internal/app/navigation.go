@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+
+	"github.com/ankitaniket/clean-me/internal/history"
 	"github.com/ankitaniket/clean-me/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -45,6 +48,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyProgress(key)
 	case ScreenSpace:
 		return m.keySpace(key)
+	case ScreenHistory:
+		return m.keyHistory(key)
 	}
 	return m, nil
 }
@@ -65,7 +70,7 @@ func (m Model) keyDashboard(key string) (tea.Model, tea.Cmd) {
 			m.st.menuCursor--
 		}
 	case "down", "j":
-		if m.st.menuCursor < 2 {
+		if m.st.menuCursor < 3 {
 			m.st.menuCursor++
 		}
 	case "enter":
@@ -79,7 +84,44 @@ func (m Model) keyDashboard(key string) (tea.Model, tea.Cmd) {
 			m.st.screen = ScreenCategories
 		case 2:
 			return m.openSpace()
+		case 3:
+			return m.openHistory()
 		}
+	}
+	return m, nil
+}
+
+// openHistory loads the run log and shows the History screen.
+func (m Model) openHistory() (tea.Model, tea.Cmd) {
+	m.st.histRuns, _ = history.List(homeDir())
+	m.st.histCur = 0
+	m.st.histMsg = ""
+	m.st.screen = ScreenHistory
+	return m, nil
+}
+
+func (m Model) keyHistory(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "up", "k":
+		if m.st.histCur > 0 {
+			m.st.histCur--
+		}
+	case "down", "j":
+		if m.st.histCur < len(m.st.histRuns)-1 {
+			m.st.histCur++
+		}
+	case "r":
+		if m.st.histCur < len(m.st.histRuns) {
+			run := m.st.histRuns[m.st.histCur]
+			errs := history.RestoreRun(run)
+			m.st.histMsg = fmt.Sprintf("restored %d of %d item(s)", len(run.Items)-len(errs), len(run.Items))
+			m.st.histRuns, _ = history.List(homeDir())
+			if m.st.histCur >= len(m.st.histRuns) {
+				m.st.histCur = 0
+			}
+		}
+	case "esc":
+		m.st.screen = ScreenDashboard
 	}
 	return m, nil
 }

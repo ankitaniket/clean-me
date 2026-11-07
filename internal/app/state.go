@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ankitaniket/clean-me/internal/diskstat"
+	"github.com/ankitaniket/clean-me/internal/history"
 	"github.com/ankitaniket/clean-me/internal/models"
 )
 
@@ -29,6 +30,7 @@ const (
 	ScreenReview
 	ScreenProgress
 	ScreenSpace
+	ScreenHistory
 )
 
 // sortMode controls how the explorer orders items.
@@ -104,6 +106,11 @@ type State struct {
 	// disk usage captured before cleaning, to show free before→after
 	freeBefore int64
 	haveFree   bool
+
+	// History screen state
+	histRuns []history.Run
+	histCur  int
+	histMsg  string
 
 	// Space Explorer state (read-only drill-down)
 	spaceDir   string
