@@ -6,12 +6,16 @@ import (
 	"context"
 
 	"github.com/ankitaniket/clean-me/internal/models"
+	"github.com/ankitaniket/clean-me/internal/stages/caches"
 	"github.com/ankitaniket/clean-me/internal/stages/docker"
 	"github.com/ankitaniket/clean-me/internal/stages/git"
+	"github.com/ankitaniket/clean-me/internal/stages/largefiles"
 	"github.com/ankitaniket/clean-me/internal/stages/node"
 	"github.com/ankitaniket/clean-me/internal/stages/python"
 	"github.com/ankitaniket/clean-me/internal/stages/redis"
 	"github.com/ankitaniket/clean-me/internal/stages/system"
+	"github.com/ankitaniket/clean-me/internal/stages/trash"
+	"github.com/ankitaniket/clean-me/internal/stages/xcode"
 )
 
 // Stage is one cleanup domain. Stages only scan (read-only) and describe how
@@ -32,6 +36,7 @@ func All() []Stage {
 	return []Stage{
 		docker.Stage{}, system.Stage{}, node.Stage{},
 		python.Stage{}, git.Stage{}, redis.Stage{},
+		xcode.Stage{}, caches.Stage{}, trash.Stage{}, largefiles.Stage{},
 	}
 }
 

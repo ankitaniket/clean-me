@@ -82,7 +82,75 @@ func (Stage) Scan(ctx context.Context, o models.Options) ([]models.Item, error) 
 			}
 		}
 	}
+
+	items = append(items, pmCaches(ctx)...)
 	return items, nil
+}
+
+// pmCaches reports the yarn/pnpm/bun download stores. Where the tool is present
+// we prefer its own prune command (which handles shared links correctly);
+// otherwise we trash the directory directly.
+func pmCaches(ctx context.Context) []models.Item {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	var items []models.Item
+
+	// yarn cache — only via the tool, which knows its own location.
+	if run.Look("yarn") {
+		if out, err := run.Capture(ctx, "yarn", "cache", "dir"); err == nil {
+			dir := strings.TrimSpace(out)
+			if dir != "" {
+				if size, _ := sizeutil.DirSize(dir); size > 0 {
+					items = append(items, models.Item{
+						Stage: "node", Path: dir,
+						Purpose: "yarn download cache, re-downloadable",
+						Size:    size, Reclaimable: size, Tier: models.TierSafe,
+						Action: models.ActionCommand, Permanent: true, Command: "yarn cache clean",
+					})
+				}
+			}
+		}
+	}
+
+	// pnpm content-addressable store.
+	for _, dir := range []string{
+		filepath.Join(home, "Library", "pnpm"),
+		filepath.Join(home, ".local", "share", "pnpm"),
+	} {
+		size, _ := sizeutil.DirSize(dir)
+		if size <= 0 {
+			continue
+		}
+		it := models.Item{
+			Stage: "node", Path: dir,
+			Purpose: "pnpm store, re-downloadable",
+			Size:    size, Reclaimable: size, Tier: models.TierSafe,
+		}
+		if run.Look("pnpm") {
+			it.Action = models.ActionCommand
+			it.Permanent = true
+			it.Command = "pnpm store prune"
+		} else {
+			it.Action = models.ActionTrash
+		}
+		items = append(items, it)
+		break
+	}
+
+	// bun install cache.
+	bun := filepath.Join(home, ".bun", "install", "cache")
+	if size, _ := sizeutil.DirSize(bun); size > 0 {
+		items = append(items, models.Item{
+			Stage: "node", Path: bun,
+			Purpose: "bun install cache, re-downloadable",
+			Size:    size, Reclaimable: size, Tier: models.TierSafe,
+			Action: models.ActionTrash,
+		})
+	}
+
+	return items
 }
 
 // LinkedManager returns "pnpm" or "bun" when a node_modules is populated via a
