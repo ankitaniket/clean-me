@@ -13,3 +13,6 @@ clean-me
 # Editor
 .idea/
 .vscode/
+
+# Local, untracked notes (Diwali post etc.) — never pushed
+/local/
