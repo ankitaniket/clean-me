@@ -1,70 +1,98 @@
 # clean-me
 
-A safe, multi-stage system cleanup CLI. It reclaims disk space across **Docker, OS caches, Node.js and Python projects**, and audits **stale git branches** and **Redis memory** — but it never deletes blindly.
+**Your interactive system cleanup companion.**
 
-Every item is previewed with its **path · purpose · reclaimable size**. Deletions go to the **trash first** (recoverable). Dangerous operations require an explicit `--force`. Safe to run on production servers and professional laptops.
+A safe, interactive terminal application that helps developers discover, understand and reclaim wasted disk space. Scan your machine, explore cleanup opportunities, review exactly what will be removed, and clean with confidence.
 
-```
-▸ NODE  (7.0 GB reclaimable)
-  TIER  SIZE    PURPOSE                              PATH
-  safe  7.0 GB  npm download cache, re-downloadable  ~/.npm/_cacache
+Run it with no arguments and it launches a dashboard — no command memorization required. Think `lazygit`/`k9s`, for disk hygiene.
 
-▸ SYSTEM  (299.4 MB reclaimable)
-  TIER  SIZE      PURPOSE                                            PATH
-  safe  299.4 MB  old formula downloads & versions, re-downloadable  Homebrew cache
+## The philosophy
 
-Total reclaimable: 7.3 GB
-```
-
-## Philosophy
-
-clean-me does not reinvent cleanup logic. It is an **orchestrator + safety layer** on top of tools that are already proven: `docker system df`/`prune`, `brew`/`apt`/`dnf`, `npm`/`pip` caches, and `git`. clean-me's job is to make them **safe to run everywhere** by always answering three questions before it touches anything:
-
-1. **What** exactly will be removed (the path)?
-2. **Why** is it safe to remove (the purpose)?
-3. **How much** space does it free (the reclaimable size)?
+No blind deletion. No mysterious cleanup commands. Every operation explains **what** it removes, **why** it is safe, and **how much** space it can recover. Deletions move to the trash first (recoverable). Dangerous operations require explicit confirmation. Safe to run on production servers and professional laptops.
 
 ## Install
 
 ```sh
-go install github.com/ankitaniket/clean-me@latest
+go install github.com/ankitaniket/clean-me/cmd/clean-me@latest
 # or build a single static binary
-go build -o clean-me .
+go build -o clean-me ./cmd/clean-me
 ```
 
-## Usage
+## Interactive dashboard
 
 ```sh
-clean-me scan                      # read-only preview of everything (deletes nothing)
-clean-me scan --json               # machine-readable output
-clean-me clean                     # reclaim, asking before each item (default No)
-clean-me clean --dry-run           # show the exact commands without running them
-clean-me clean --stage node,python --path ~/code
-clean-me clean --tier 2            # also include opt-in items (e.g. all unused Docker images)
-clean-me clean --tier 3 --force    # include danger-tier (Docker volumes, virtualenvs)
-clean-me clean --no-trash          # permanently delete instead of trashing
+clean-me
 ```
+
+Five screens, fully keyboard-driven:
+
+1. **Dashboard** — auto-scans on launch; shows total reclaimable space, opportunity count, and per-stage status.
+2. **Categories** — Docker, Node.js, Python, System, plus Git & Redis audits.
+3. **Explorer** — selectable items with size · purpose · path · risk tier. Danger items are never preselected.
+4. **Review** — exact impact: how much is reclaimed, what moves to trash vs. is permanent, with a confirmation step.
+5. **Progress** — live per-item results and the **actual** space freed.
+
+**Smart Cleanup** selects every safe (tier-1) item for you and jumps straight to review.
+
+### Keys
+
+| Key | Action | Key | Action |
+|-----|--------|-----|--------|
+| `↑ ↓` / `j k` | Navigate | `a` | Select all safe |
+| `Enter` | Open / Continue | `n` | Deselect all |
+| `Space` | Select / Deselect | `Esc` | Back |
+| `y` | Confirm danger item | `q` | Quit |
+
+## Scriptable CLI
+
+The dashboard is the default for humans; the CLI remains for scripts, CI, and SSH sessions.
+
+| Command | Experience |
+|---------|-----------|
+| `clean-me` | Interactive dashboard (falls back to `scan` with no TTY) |
+| `clean-me scan [--json]` | Read-only report |
+| `clean-me clean [--yes] [--stage node] [--tier 2] [--force] [--no-trash]` | Non-interactive cleanup with per-item confirmation |
+| `clean-me doctor` | Diagnose detected stages, tools and permissions |
 
 ### Safety model
 
-- **Dry-run first**: `scan` and `clean --dry-run` never modify anything.
-- **Trash-first**: confirmed deletions move to the OS trash; empty it to finalize.
-- **Risk tiers**: `safe` (tier 1, default) → `opt-in` (tier 2) → `danger` (tier 3, needs `--force`).
-- **No-TTY guard**: in a non-interactive shell nothing is deleted unless `--yes` is passed.
-- **Root guard**: refuses to run as root without `--allow-root`.
+- **Read-only by default** — `scan` and `clean --dry-run` never modify anything.
+- **Trash-first** — confirmed deletions move to the OS trash; empty it to finalize.
+- **Risk tiers** — `safe` (default) → `opt-in` → `danger` (needs `--force`); danger is never auto-selected.
+- **Revalidation** — paths are re-checked and symlinks refused immediately before deletion.
+- **Project-aware** — a `node_modules` is only offered when its parent is a real project (has `package.json`).
+- **Guards** — refuses to run as root without `--allow-root`; refuses to delete in a non-interactive shell without `--yes`.
 
 ## Stages
 
 | Stage | What it does | Deletes? |
 |-------|--------------|----------|
-| **docker** | Previews reclaimable from `docker system df`; prunes build cache, stopped containers, unused images (tier 2), unused volumes (tier 3) | yes (permanent — Docker has no trash) |
-| **system** | Homebrew / apt / dnf package caches, systemd journal vacuum | yes (permanent) |
-| **node** | `node_modules` (trash-first; pnpm/bun link-aware sizing) + npm cache | yes (trash-first) |
-| **python** | `__pycache__`, tool caches, pip cache, virtualenvs (tier 3) | yes (trash-first) |
-| **git** | Audits merged / upstream-gone / stale (>90d) branches across repos | **report-only** |
-| **redis** | Audits memory usage and biggest keys (read-only, non-blocking) | **report-only** |
+| **Docker** | Prunes build cache, stopped containers, unused images (tier 2), volumes (tier 3) | yes (permanent — Docker has no trash) |
+| **System** | Homebrew / apt / dnf package caches, systemd journal vacuum | yes (permanent) |
+| **Node.js** | `node_modules` (trash-first; pnpm/bun link-aware) + npm cache | yes (trash-first) |
+| **Python** | `__pycache__`, tool caches, pip cache, virtualenvs (tier 3) | yes (trash-first) |
+| **Git** | Audits merged / upstream-gone / stale (>90d) branches | **report-only** |
+| **Redis** | Audits memory usage and biggest keys (read-only, non-blocking) | **report-only** |
 
-Git branches and Redis keys are **audit-only** by design: both are too easy to break by deleting blindly, so clean-me shows you what to review and leaves the decision to you.
+Git branches and Redis keys are **audit-only** by design — too easy to break by deleting blindly, so clean-me shows what to review and leaves the decision to you.
+
+## Architecture
+
+The cleanup engine is independent of the UI: stages only *scan* and describe each item's action; one `cleaner` *executes*; the TUI, CLI, and JSON output are interchangeable front ends over the same engine.
+
+```
+internal/
+  models/    pure data (Item, Tier, Action, ScanResult)
+  scanner/   Stage contract + concurrent aggregator
+  cleaner/   executor + trash-first deletion
+  safety/    tier gating, confirmation, pre-delete revalidation
+  stages/    docker · system · node · python · git · redis  (scan-only)
+  app/ tui/  Bubble Tea dashboard
+```
+
+## Roadmap
+
+Deep system scan, cleanup history & recovery UI, cleanup profiles (laptop / Docker-heavy / production), a disk-usage explorer, and scheduled read-only scans.
 
 ## License
 
