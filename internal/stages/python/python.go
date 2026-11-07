@@ -81,11 +81,15 @@ func (Stage) Scan(ctx context.Context, o models.Options) ([]models.Item, error) 
 				filepath.Join(home, ".cache", "pip"),            // Linux
 			} {
 				if size, _ := sizeutil.DirSize(c); size > 0 {
+					purge := "pip cache purge"
+					if !run.Look("pip") && run.Look("pip3") {
+						purge = "pip3 cache purge"
+					}
 					items = append(items, models.Item{
 						Stage: "python", Path: c,
 						Purpose: "pip download cache, re-downloadable",
 						Size:    size, Reclaimable: size, Tier: models.TierSafe,
-						Action: models.ActionCommand, Permanent: true, Command: "pip cache purge",
+						Action: models.ActionCommand, Permanent: true, Command: purge,
 					})
 					break
 				}

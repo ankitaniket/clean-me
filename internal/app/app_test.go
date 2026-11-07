@@ -87,6 +87,17 @@ func TestReportCategoryNotSelectable(t *testing.T) {
 	}
 }
 
+func TestQuitKey(t *testing.T) {
+	m := cannedModel()
+	_, cmd := m.Update(key("q"))
+	if cmd == nil {
+		t.Fatal("q should return a command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("q should produce tea.QuitMsg")
+	}
+}
+
 func TestSpaceTogglesSelection(t *testing.T) {
 	m := cannedModel()
 	m.st.screen = ScreenExplorer
