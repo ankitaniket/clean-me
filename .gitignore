@@ -1,0 +1,15 @@
+# Compiled binary
+/clean-me
+clean-me
+*.exe
+
+# Go build/test artifacts
+*.out
+*.test
+
+# OS cruft
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
