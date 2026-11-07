@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/ankitaniket/clean-me/internal/scanner"
 	"github.com/spf13/cobra"
@@ -26,6 +27,15 @@ var doctorCmd = &cobra.Command{
 			cmd.Printf("  %-9s %s%s\n", s.Name(), status, kind)
 		}
 		cmd.Println()
+		if home, err := os.UserHomeDir(); err == nil {
+			cfg := filepath.Join(home, ".config", "clean-me", "exclude")
+			status := "not present"
+			if _, err := os.Stat(cfg); err == nil {
+				status = "present"
+			}
+			cmd.Printf("exclude allow-list: %s (%s)\n", cfg, status)
+			cmd.Println()
+		}
 		if os.Geteuid() == 0 {
 			cmd.Println("⚠ running as root — clean-me refuses destructive actions without --allow-root")
 		} else {

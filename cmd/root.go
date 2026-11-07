@@ -6,9 +6,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/ankitaniket/clean-me/internal/app"
 	"github.com/ankitaniket/clean-me/internal/models"
+	"github.com/ankitaniket/clean-me/internal/safety"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +25,8 @@ var (
 	flagYes     bool
 	flagNoTrash bool
 	flagAllow   bool
+	flagMinSize string
+	flagExclude []string
 )
 
 var rootCmd = &cobra.Command{
@@ -66,20 +71,60 @@ func init() {
 	pf.BoolVar(&flagYes, "yes", false, "assume yes (non-interactive / CI)")
 	pf.BoolVar(&flagNoTrash, "no-trash", false, "delete permanently instead of moving to trash")
 	pf.BoolVar(&flagAllow, "allow-root", false, "allow running as root (refused by default)")
+	pf.StringVar(&flagMinSize, "min-size", "", "large-files threshold, e.g. 200MB/1.5GB (default: stage default)")
+	pf.StringSliceVar(&flagExclude, "exclude", nil, "extra paths to protect (repeatable); merged with ~/.config/clean-me/exclude")
 
 	rootCmd.AddCommand(scanCmd, cleanCmd, doctorCmd)
 }
 
 // baseOptions builds engine options from the shared flags.
 func baseOptions(dryRun bool) models.Options {
+	root, _ := os.UserHomeDir()
 	return models.Options{
-		Force:   flagForce,
-		Yes:     flagYes,
-		NoTrash: flagNoTrash,
-		MaxTier: models.Tier(flagTier),
-		Paths:   flagPaths,
-		DryRun:  dryRun,
+		Force:       flagForce,
+		Yes:         flagYes,
+		NoTrash:     flagNoTrash,
+		MaxTier:     models.Tier(flagTier),
+		Paths:       flagPaths,
+		DryRun:      dryRun,
+		MinFileSize: parseSize(flagMinSize),
+		Exclude:     append(safety.LoadExclude(), flagExclude...),
+		SpaceRoot:   root,
 	}
+}
+
+// parseSize converts a human size like "200MB", "1.5GB", "200M", "1G" or a
+// plain byte count into bytes. On empty input or any parse error it returns 0,
+// which stages interpret as "use the stage default".
+func parseSize(s string) int64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	u := strings.ToUpper(s)
+	mult := float64(1)
+	switch {
+	case strings.HasSuffix(u, "TB") || strings.HasSuffix(u, "T"):
+		mult = 1 << 40
+		u = strings.TrimSuffix(strings.TrimSuffix(u, "TB"), "T")
+	case strings.HasSuffix(u, "GB") || strings.HasSuffix(u, "G"):
+		mult = 1 << 30
+		u = strings.TrimSuffix(strings.TrimSuffix(u, "GB"), "G")
+	case strings.HasSuffix(u, "MB") || strings.HasSuffix(u, "M"):
+		mult = 1 << 20
+		u = strings.TrimSuffix(strings.TrimSuffix(u, "MB"), "M")
+	case strings.HasSuffix(u, "KB") || strings.HasSuffix(u, "K"):
+		mult = 1 << 10
+		u = strings.TrimSuffix(strings.TrimSuffix(u, "KB"), "K")
+	case strings.HasSuffix(u, "B"):
+		u = strings.TrimSuffix(u, "B")
+	}
+	u = strings.TrimSpace(u)
+	v, err := strconv.ParseFloat(u, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return int64(v * mult)
 }
 
 // refuseRoot guards against running with full privileges unless opted in.

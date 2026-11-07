@@ -26,7 +26,7 @@ clean-me
 
 The dashboard is calm and read-only-first: it never scans or deletes until you ask it to.
 
-It opens on a **Welcome** screen that reassures you nothing is touched until you review and confirm — "it only looks when asked." Press `Enter` to start the scan.
+It opens on a richer **Welcome** screen that reassures you nothing is touched until you review and confirm — "it only looks when asked." Press `Enter` to start the scan, or `?` at any time for a help overlay listing every key.
 
 ```
   clean-me
@@ -50,12 +50,14 @@ While you browse, a persistent green ribbon stays pinned to the top:
 
 The browsing screens are deliberately compact — **one line per item** with a detail panel for whatever is focused, so there is far less text on screen:
 
-1. **Welcome** — read-only reassurance; `Enter` starts the scan.
-2. **Dashboard** — total reclaimable space, opportunity count, and per-stage status.
-3. **Categories** — Docker, Node.js, Python, System, plus Git & Redis audits.
-4. **Explorer** — one compact line per item (`[x]` · size · name) with a detail panel showing purpose, path, and risk tier for the focused item. Danger items are never preselected.
+1. **Welcome** — read-only reassurance; `Enter` starts the scan, `?` opens help.
+2. **Dashboard** — total reclaimable space, opportunity count, per-stage status, and a disk-usage bar showing used vs. free space on the volume.
+3. **Categories** — Docker, Node.js, Python, System, Xcode, Caches & Trash, plus Git & Redis audits.
+4. **Explorer** — one compact line per item (`[x]` · size · name) with a detail panel showing purpose, path, and risk tier for the focused item. Long lists scroll; `s` cycles the sort order (size / name) and `/` filters by a search term. Danger items are never preselected.
 5. **Review** — lists **every** item that will be removed, grouped by stage.
 6. **Progress** — live per-item results and the **actual** space freed.
+
+A read-only **Space Explorer**, reachable from the dashboard, gives an `ncdu`-style drill-down of the largest directories under your home (or `--min-size`'s root), so you can understand where space has gone before deciding what to clean. It never deletes anything — it is purely for exploration.
 
 **Selection is explicit.** Each item carries an `[x]` / `[ ]` checkbox: `Space` toggles the focused item, `a` selects all safe (tier-1) items, `n` deselects everything. A live **`N selected (size)`** counter always shows what you have chosen.
 
@@ -90,8 +92,10 @@ The **Review** screen is the last gate. It lists every item that will be removed
 |-----|--------|-----|--------|
 | `↑ ↓` / `j k` | Navigate | `a` | Select all safe |
 | `Enter` | Open / Continue | `n` | Deselect all |
-| `Space` | Select / Deselect | `Esc` | Back |
-| `y` | Confirm danger item | `q` | Quit |
+| `Space` | Select / Deselect | `s` | Cycle sort (Explorer) |
+| `y` | Confirm danger item | `/` | Search / filter (Explorer) |
+| `?` | Help overlay | `Esc` | Back |
+| `q` | Quit | | |
 
 ## Scriptable CLI
 
@@ -104,6 +108,13 @@ The dashboard is the default for humans; the CLI remains for scripts, CI, and SS
 | `clean-me clean [--yes] [--stage node] [--tier 2] [--force] [--no-trash]` | Non-interactive cleanup with per-item confirmation |
 | `clean-me doctor` | Diagnose detected stages, tools and permissions |
 
+Two further persistent flags apply to every command:
+
+| Flag | Effect |
+|------|--------|
+| `--min-size 200MB` | Large-files threshold. Accepts `200MB`, `1.5GB`, `200M`, `1G`, `500K` or a plain byte count; an unparseable value is ignored and the stage default is used. |
+| `--exclude PATH` | Extra path to protect, repeatable. Merged on top of the `~/.config/clean-me/exclude` allow-list. |
+
 ### Safety model
 
 - **Read-only by default** — `scan` and `clean --dry-run` never modify anything.
@@ -111,6 +122,8 @@ The dashboard is the default for humans; the CLI remains for scripts, CI, and SS
 - **Risk tiers** — `safe` (default) → `opt-in` → `danger` (needs `--force`); danger is never auto-selected.
 - **Revalidation** — paths are re-checked and symlinks refused immediately before deletion.
 - **Project-aware** — a `node_modules` is only offered when its parent is a real project (has `package.json`).
+- **Protected paths** — credential and config directories (`.ssh`, `.aws`, `.gnupg`, `.kube`, `.cargo`, `.docker`) are never touched, regardless of tier.
+- **Allow-list** — list one path per line in `~/.config/clean-me/exclude` to protect your own paths; `--exclude PATH` adds more on the fly. `clean-me doctor` reports this file's location and whether it exists.
 - **Guards** — refuses to run as root without `--allow-root`; refuses to delete in a non-interactive shell without `--yes`.
 
 ## Stages
@@ -119,8 +132,12 @@ The dashboard is the default for humans; the CLI remains for scripts, CI, and SS
 |-------|--------------|----------|
 | **Docker** | Prunes build cache, stopped containers, unused images (tier 2), volumes (tier 3) | yes (permanent — Docker has no trash) |
 | **System** | Homebrew / apt / dnf package caches, systemd journal vacuum | yes (permanent) |
-| **Node.js** | `node_modules` (trash-first; pnpm/bun link-aware) + npm cache | yes (trash-first) |
+| **Node.js** | `node_modules` (trash-first; pnpm/bun link-aware) + npm / yarn / pnpm / bun caches | yes (trash-first) |
 | **Python** | `__pycache__`, tool caches, pip cache, virtualenvs (tier 3) | yes (trash-first) |
+| **Xcode** | DerivedData, device support, archives and simulator junk | yes (trash-first) |
+| **Caches** | Per-app and per-tool `~/Library/Caches` / `~/.cache` entries, sized individually | yes (trash-first) |
+| **Trash** | Reports and empties the OS trash to finalize reclaimed space | yes (permanent) |
+| **Large Files** | Finds individual files above a size threshold (see `--min-size`) | **report-only** |
 | **Git** | Audits merged / upstream-gone / stale (>90d) branches | **report-only** |
 | **Redis** | Audits memory usage and biggest keys (read-only, non-blocking) | **report-only** |
 
@@ -136,13 +153,13 @@ internal/
   scanner/   Stage contract + concurrent aggregator
   cleaner/   executor + trash-first deletion
   safety/    tier gating, confirmation, pre-delete revalidation
-  stages/    docker · system · node · python · git · redis  (scan-only)
+  stages/    docker · system · node · python · xcode · caches · trash · largefiles · git · redis  (scan-only)
   app/ tui/  Bubble Tea dashboard
 ```
 
 ## Roadmap
 
-Deep system scan, cleanup history & recovery UI, cleanup profiles (laptop / Docker-heavy / production), a disk-usage explorer, and scheduled read-only scans.
+Cleanup history & recovery UI, cleanup profiles (laptop / Docker-heavy / production), and scheduled read-only scans. (The disk-usage explorer now ships as the read-only Space Explorer.)
 
 ## License
 
