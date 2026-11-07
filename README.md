@@ -6,6 +6,14 @@ A safe, interactive terminal application that helps developers discover, underst
 
 Run it with no arguments and it launches a dashboard — no command memorization required. Think `lazygit`/`k9s`, for disk hygiene.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="clean-me — scan, review every item, and clean trash-first" width="760">
+</p>
+
+<p align="center">
+  <em>Welcome → scan → review every item → trash-first cleanup. Nothing is deleted until you confirm.</em>
+</p>
+
 ## The philosophy
 
 No blind deletion. No mysterious cleanup commands. Every operation explains **what** it removes, **why** it is safe, and **how much** space it can recover. Deletions move to the trash first (recoverable). Dangerous operations require explicit confirmation. Safe to run on production servers and professional laptops.

@@ -1,6 +1,5 @@
-# Compiled binary
+# Compiled binary (root only — must not match the cmd/clean-me/ package dir)
 /clean-me
-clean-me
 *.exe
 
 # Go build/test artifacts
