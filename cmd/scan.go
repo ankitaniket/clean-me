@@ -22,8 +22,10 @@ deleted. Use --json for machine-readable output.`,
 
 // runScan is shared by `scan` and the non-TTY fallback of the root command.
 func runScan(cmd *cobra.Command) error {
+	// baseOptions first: a --profile may populate the stage filter.
+	o := baseOptions(true)
 	stages := scanner.Select(flagStages)
-	res := scanner.Scan(context.Background(), stages, baseOptions(true))
+	res := scanner.Scan(context.Background(), stages, o)
 	if flagJSON {
 		return report.JSON(os.Stdout, res)
 	}

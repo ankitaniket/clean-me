@@ -10,11 +10,15 @@ import (
 	"strings"
 
 	"github.com/ankitaniket/clean-me/internal/app"
+	"github.com/ankitaniket/clean-me/internal/config"
 	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/ankitaniket/clean-me/internal/safety"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
+
+// Version is overridden at build time via -ldflags "-X .../cmd.Version=...".
+var Version = "dev"
 
 var (
 	flagStages  []string
@@ -27,6 +31,7 @@ var (
 	flagAllow   bool
 	flagMinSize string
 	flagExclude []string
+	flagProfile string
 )
 
 var rootCmd = &cobra.Command{
@@ -41,6 +46,7 @@ purpose and reclaimable size; deletions move to the trash first; dangerous
 operations require explicit confirmation. The scan/clean/doctor subcommands
 provide a scriptable, non-interactive surface.`,
 	SilenceUsage: true,
+	Version:      Version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := refuseRoot(); err != nil {
 			return err
@@ -73,14 +79,18 @@ func init() {
 	pf.BoolVar(&flagAllow, "allow-root", false, "allow running as root (refused by default)")
 	pf.StringVar(&flagMinSize, "min-size", "", "large-files threshold, e.g. 200MB/1.5GB (default: stage default)")
 	pf.StringSliceVar(&flagExclude, "exclude", nil, "extra paths to protect (repeatable); merged with ~/.config/clean-me/exclude")
+	pf.StringVar(&flagProfile, "profile", "", "apply a scope profile (laptop/server/docker/node/python or one from your config)")
 
-	rootCmd.AddCommand(scanCmd, cleanCmd, doctorCmd)
+	rootCmd.SetVersionTemplate("clean-me {{.Version}}\n")
+	rootCmd.AddCommand(scanCmd, cleanCmd, doctorCmd, historyCmd, restoreCmd)
 }
 
-// baseOptions builds engine options from the shared flags.
+// baseOptions builds engine options from the shared flags, then layers a
+// profile (if --profile is set) on top — profiles adjust scope only, never the
+// Force/NoTrash safety flags.
 func baseOptions(dryRun bool) models.Options {
 	root, _ := os.UserHomeDir()
-	return models.Options{
+	o := models.Options{
 		Force:       flagForce,
 		Yes:         flagYes,
 		NoTrash:     flagNoTrash,
@@ -91,6 +101,17 @@ func baseOptions(dryRun bool) models.Options {
 		Exclude:     append(safety.LoadExclude(), flagExclude...),
 		SpaceRoot:   root,
 	}
+	if flagProfile != "" {
+		cfg, _ := config.Load("")
+		if p, ok := config.Resolve(cfg, flagProfile); ok {
+			if stages := config.Apply(p, &o, parseSize); len(flagStages) == 0 && len(stages) > 0 {
+				flagStages = stages
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "note: unknown profile %q — ignoring\n", flagProfile)
+		}
+	}
+	return o
 }
 
 // parseSize converts a human size like "200MB", "1.5GB", "200M", "1G" or a

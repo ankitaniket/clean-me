@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/ankitaniket/clean-me/internal/cleaner"
+	"github.com/ankitaniket/clean-me/internal/history"
 	"github.com/ankitaniket/clean-me/internal/models"
 	"github.com/ankitaniket/clean-me/internal/report"
 	"github.com/ankitaniket/clean-me/internal/safety"
@@ -64,6 +66,7 @@ nothing is deleted unless --yes is given. For a guided experience, run
 		}
 
 		result := cleaner.Execute(ctx, accepted, o, nil)
+		_ = history.Record("", time.Now(), result.Outcomes)
 		for _, out := range result.Outcomes {
 			if out.Err != nil {
 				fmt.Fprintf(os.Stderr, "  ! %s: %v\n", out.Item.Path, out.Err)

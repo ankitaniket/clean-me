@@ -106,14 +106,37 @@ The dashboard is the default for humans; the CLI remains for scripts, CI, and SS
 | `clean-me` | Interactive dashboard (falls back to `scan` with no TTY) |
 | `clean-me scan [--json]` | Read-only report |
 | `clean-me clean [--yes] [--stage node] [--tier 2] [--force] [--no-trash]` | Non-interactive cleanup with per-item confirmation |
+| `clean-me history` | List past cleanup runs (what was moved to Trash) |
+| `clean-me restore` | Restore the most recent run from Trash (undo) |
 | `clean-me doctor` | Diagnose detected stages, tools and permissions |
+| `clean-me --version` | Print the version |
 
-Two further persistent flags apply to every command:
+Further persistent flags apply to every command:
 
 | Flag | Effect |
 |------|--------|
+| `--profile NAME` | Apply a scope profile: `laptop`, `server`, `docker`, `node`, `python`, or one you define. Profiles change *scope only* (stages, tier, paths, min-size) — never the safety flags. |
 | `--min-size 200MB` | Large-files threshold. Accepts `200MB`, `1.5GB`, `200M`, `1G`, `500K` or a plain byte count; an unparseable value is ignored and the stage default is used. |
 | `--exclude PATH` | Extra path to protect, repeatable. Merged on top of the `~/.config/clean-me/exclude` allow-list. |
+
+### History & undo
+
+Every cleanup run is logged to `~/.config/clean-me/history/log.jsonl` with each item's original path and Trash location. `clean-me history` lists runs; `clean-me restore` moves the most recent run's items back out of the Trash. In the dashboard, the **History** menu item does the same with one-key restore per run.
+
+### Config & profiles
+
+Drop a `~/.config/clean-me/config.json` to define reusable profiles:
+
+```json
+{
+  "defaultProfile": "laptop",
+  "profiles": {
+    "work": { "stages": ["node", "docker", "caches"], "tier": 2, "paths": ["~/code"] }
+  }
+}
+```
+
+Built-in profiles (`laptop`, `server`, `docker`, `node`, `python`) work without any config. Profiles only widen or narrow *what is scanned* — they can never turn off trash-first or auto-approve danger-tier deletions.
 
 ### Safety model
 
