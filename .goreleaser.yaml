@@ -1,0 +1,65 @@
+# GoReleaser v2 configuration — build cross-platform binaries, archives,
+# checksums, and a Homebrew formula on each tagged release.
+# Docs: https://goreleaser.com
+version: 2
+
+project_name: clean-me
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: clean-me
+    main: ./cmd/clean-me
+    binary: clean-me
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/ankitaniket/clean-me/cmd.Version={{.Version}}
+      - -X github.com/ankitaniket/clean-me/cmd.Commit={{.ShortCommit}}
+      - -X github.com/ankitaniket/clean-me/cmd.Date={{.Date}}
+
+archives:
+  - id: clean-me
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+
+# Publish a Homebrew cask to github.com/ankitaniket/homebrew-tap.
+# Requires a HOMEBREW_TAP_GITHUB_TOKEN secret (PAT with `repo` scope) in CI.
+homebrew_casks:
+  - name: clean-me
+    repository:
+      owner: ankitaniket
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ankitaniket/clean-me"
+    description: "Safe, interactive terminal disk cleanup for developers"
+
+release:
+  draft: false
+  prerelease: auto

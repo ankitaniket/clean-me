@@ -20,11 +20,25 @@ No blind deletion. No mysterious cleanup commands. Every operation explains **wh
 
 ## Install
 
+**Homebrew** (macOS/Linux):
+
+```sh
+brew install ankitaniket/tap/clean-me
+```
+
+**Go**:
+
 ```sh
 go install github.com/ankitaniket/clean-me/cmd/clean-me@latest
-# or build a single static binary
+```
+
+**From source** (single static binary, no runtime deps):
+
+```sh
 go build -o clean-me ./cmd/clean-me
 ```
+
+Pre-built binaries for macOS and Linux (amd64/arm64) are attached to each [release](https://github.com/ankitaniket/clean-me/releases). Check your version with `clean-me --version`.
 
 ## Interactive dashboard
 

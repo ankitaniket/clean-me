@@ -13,5 +13,8 @@
 .idea/
 .vscode/
 
-# Local, untracked notes (Diwali post etc.) — never pushed
+# Local, untracked notes — never pushed
 /local/
+
+# GoReleaser build output
+/dist/

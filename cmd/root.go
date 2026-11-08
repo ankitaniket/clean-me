@@ -17,8 +17,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is overridden at build time via -ldflags "-X .../cmd.Version=...".
-var Version = "dev"
+// Build metadata, overridden at release time via -ldflags
+// "-X .../cmd.Version=... -X .../cmd.Commit=... -X .../cmd.Date=...".
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+)
+
+// versionString composes the human-readable version line.
+func versionString() string {
+	if Commit == "none" && Date == "unknown" {
+		return Version
+	}
+	return fmt.Sprintf("%s (commit %s, built %s)", Version, Commit, Date)
+}
 
 var (
 	flagStages  []string
@@ -46,7 +59,6 @@ purpose and reclaimable size; deletions move to the trash first; dangerous
 operations require explicit confirmation. The scan/clean/doctor subcommands
 provide a scriptable, non-interactive surface.`,
 	SilenceUsage: true,
-	Version:      Version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := refuseRoot(); err != nil {
 			return err
@@ -81,6 +93,7 @@ func init() {
 	pf.StringSliceVar(&flagExclude, "exclude", nil, "extra paths to protect (repeatable); merged with ~/.config/clean-me/exclude")
 	pf.StringVar(&flagProfile, "profile", "", "apply a scope profile (laptop/server/docker/node/python or one from your config)")
 
+	rootCmd.Version = versionString()
 	rootCmd.SetVersionTemplate("clean-me {{.Version}}\n")
 	rootCmd.AddCommand(scanCmd, cleanCmd, doctorCmd, historyCmd, restoreCmd)
 }
